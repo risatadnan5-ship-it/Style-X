@@ -5,6 +5,7 @@ import {
   Settings, CheckCircle, Clock, Package, Trash2, Edit3, Plus, RefreshCw, Star, Tag, X, FileMinus 
 } from 'lucide-react';
 import { db } from '../dbMock';
+import { supabase } from '../supabaseClient';
 import { Product, Order, Review, ChatMessage, Coupon } from '../types';
 
 export default function AdminDashboard() {
@@ -77,7 +78,7 @@ export default function AdminDashboard() {
   };
 
   // Product Add / Update stock
-  const handleAddProductSubmit = (e: React.FormEvent) => {
+  const handleAddProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProdName || newProdPrice <= 0) {
       setFormErr('Provide a valid name and price.');
@@ -90,11 +91,11 @@ export default function AdminDashboard() {
       name: newProdName,
       description: newProdDesc || 'Genuine hand finished luxury item curated by Style X.',
       category: newProdCategory,
-      price: newProdPrice,
+      price: Number(newProdPrice),
       rating: 5.0,
       image_urls: [newProdImg],
       featured: true,
-      stock: newProdStock,
+      stock: Number(newProdStock),
       specs: {
         'Assembly': 'Atelier hand engineered',
         'Finish': 'Polished mirror bevel',
@@ -103,33 +104,69 @@ export default function AdminDashboard() {
       created_at: new Date().toISOString()
     };
 
-    const updated = [newProdItem, ...db.getProducts()];
-    db.setProducts(updated);
-    setProducts(updated);
-    
+    setFormErr('');
+
+    // Save directly to live Supabase
+    const { error } = await supabase
+      .from('products')
+      .insert([newProdItem]);
+
+    if (error) {
+      console.error('[SUPABASE PRODUCT CREATION ERROR]', error);
+      setFormErr(`Database Error: ${error.message}. Ensure your database is initialized or seeded.`);
+      return;
+    }
+
+    // Update and refresh client views
+    await db.syncFromSupabase();
+    setProducts(db.getProducts());
+
     // Clear Form
     setNewProdName('');
     setNewProdPrice(0);
     setNewProdStock(5);
     setNewProdDesc('');
     setShowProductForm(false);
+    alert('Bespoke product successfully added to your Supabase catalog!');
   };
 
-  const handleDeleteProduct = (prodId: string) => {
-    const updated = db.getProducts().filter(p => p.id !== prodId);
-    db.setProducts(updated);
-    setProducts(updated);
+  const handleDeleteProduct = async (prodId: string) => {
+    if (!confirm('Are you authorized to delete this lot permanently from sovereign archives?')) return;
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', prodId);
+
+    if (error) {
+      console.error('[SUPABASE PRODUCT DELETION ERROR]', error);
+      alert(`Database Delete Error: ${error.message}`);
+      return;
+    }
+
+    await db.syncFromSupabase();
+    setProducts(db.getProducts());
   };
 
-  const handleAdjustStock = (prodId: string, delta: number) => {
-    const updated = db.getProducts().map(p => {
-      if (p.id === prodId) {
-        return { ...p, stock: Math.max(0, p.stock + delta) };
-      }
-      return p;
-    });
-    db.setProducts(updated);
-    setProducts(updated);
+  const handleAdjustStock = async (prodId: string, delta: number) => {
+    const prod = products.find(p => p.id === prodId);
+    if (!prod) return;
+
+    const nextStock = Math.max(0, prod.stock + delta);
+
+    const { error } = await supabase
+      .from('products')
+      .update({ stock: nextStock })
+      .eq('id', prodId);
+
+    if (error) {
+      console.error('[SUPABASE PRODUCT UPDATE ERROR]', error);
+      alert(`Database Stock Update Error: ${error.message}`);
+      return;
+    }
+
+    await db.syncFromSupabase();
+    setProducts(db.getProducts());
   };
 
   // Reviews Moderation

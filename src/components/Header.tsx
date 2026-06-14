@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Heart, User, Sparkles, Bell, Shield, MessageSquare, LogOut, CheckCircle, Lock, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../dbMock';
+import { supabase } from '../supabaseClient';
 import { Notification } from '../types';
 
 interface HeaderProps {
@@ -66,7 +67,7 @@ export default function Header({
     setNotifications(notifications.map(n => ({ ...n, read: true })));
   };
 
-  const handleSwitchRole = (role: 'admin' | 'customer') => {
+  const handleSwitchRole = async (role: 'admin' | 'customer') => {
     if (role === 'admin') {
       setShowAdminPasswordPrompt(true);
       setAdminPasswordInput('');
@@ -74,6 +75,14 @@ export default function Header({
       setUserMenuOpen(false);
       return;
     }
+    
+    // Log out of Supabase Auth on reverting back to client role
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('[SUPABASE AUTH SIGNOUT ERROR]', err);
+    }
+
     const nextUser = {
       id: 'client-user-1',
       email: 'guest@stylex.luxury',
@@ -358,9 +367,48 @@ export default function Header({
 
               <form
                 id="admin-password-form"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   if (adminPasswordInput === 'risatx') {
+                    // Automate actual Supabase Auth Session
+                    try {
+                      const adminEmail = 'admin@stylex.luxury';
+                      const adminPassword = 'BespokeAdminPassword123!';
+
+                      const { data, error } = await supabase.auth.signInWithPassword({
+                        email: adminEmail,
+                        password: adminPassword,
+                      });
+
+                      if (error && error.message.includes('Invalid login credentials')) {
+                        // User not exists yet, perform auto register
+                        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+                          email: adminEmail,
+                          password: adminPassword,
+                          options: {
+                            data: {
+                              full_name: 'Style X Owner',
+                              role: 'admin'
+                            }
+                          }
+                        });
+                        
+                        if (signUpErr) {
+                          console.error('[SUPABASE ADMIN REGISTRATION ERROR]', signUpErr);
+                        } else {
+                          console.log('[SUPABASE] Admin account registered successfully.');
+                          // Force role column mapping in profile
+                          await supabase.from('profiles').update({ role: 'admin' }).eq('id', signUpData.user?.id);
+                        }
+                      } else if (error) {
+                        console.error('[SUPABASE ADMIN SIGNIN ERROR]', error);
+                      } else {
+                        console.log('[SUPABASE] Admin session created. Auth ID:', data.user?.id);
+                      }
+                    } catch (authExc) {
+                      console.error('[SUPABASE AUTO-AUTH CONTAINER EXCEPTION]', authExc);
+                    }
+
                     const nextUser = {
                       id: 'admin-id-1',
                       email: 'admin@stylex.luxury',

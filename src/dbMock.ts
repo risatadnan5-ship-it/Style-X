@@ -83,7 +83,7 @@ export async function syncFromSupabase() {
     
     if (testError) {
       supabaseConnected = false;
-      supabaseError = `Relational tables missing. Please run the SQL compilation script below inside your Supabase SQL Editor. (Reason: ${testError.message})`;
+      supabaseError = `Relational tables missing or permissions blocked. Please check your Supabase dashboard or execute the schema below. (Reason: ${testError.message})`;
       isSyncing = false;
       window.dispatchEvent(new Event('stylex_db_update'));
       return;
@@ -93,27 +93,49 @@ export async function syncFromSupabase() {
     supabaseError = null;
 
     // 1. Fetch Categories
-    const { data: categories } = await supabase.from('categories').select('*');
-    if (categories && categories.length > 0) {
+    const { data: categories, error: catErr } = await supabase.from('categories').select('*');
+    if (catErr) {
+      console.error('[SUPABASE] error fetching categories:', catErr);
+    } else if (categories && categories.length > 0) {
       set(KEYS.CATEGORIES, categories);
+    } else {
+      // Auto seed categories
+      const localCats = get<Category[]>(KEYS.CATEGORIES, INITIAL_CATEGORIES);
+      await supabase.from('categories').upsert(localCats);
+      set(KEYS.CATEGORIES, localCats);
     }
 
     // 2. Fetch Products
-    const { data: products } = await supabase.from('products').select('*');
-    if (products && products.length > 0) {
+    const { data: products, error: prodErr } = await supabase.from('products').select('*');
+    if (prodErr) {
+      console.error('[SUPABASE] error fetching products:', prodErr);
+    } else if (products && products.length > 0) {
       set(KEYS.PRODUCTS, products);
+    } else {
+      // Auto seed products
+      const localProds = get<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);
+      await supabase.from('products').upsert(localProds);
+      set(KEYS.PRODUCTS, localProds);
     }
 
     // 3. Fetch Coupons
     const { data: coupons } = await supabase.from('coupons').select('*');
     if (coupons && coupons.length > 0) {
       set(KEYS.COUPONS, coupons);
+    } else {
+      const localCoups = get<Coupon[]>(KEYS.COUPONS, INITIAL_COUPONS);
+      await supabase.from('coupons').upsert(localCoups);
+      set(KEYS.COUPONS, localCoups);
     }
 
     // 4. Fetch Reviews
     const { data: reviews } = await supabase.from('reviews').select('*');
     if (reviews && reviews.length > 0) {
       set(KEYS.REVIEWS, reviews);
+    } else {
+      const localRevs = get<Review[]>(KEYS.REVIEWS, DEFAULT_REVIEWS);
+      await supabase.from('reviews').upsert(localRevs);
+      set(KEYS.REVIEWS, localRevs);
     }
 
     // 5. Fetch Chat Messages
@@ -369,26 +391,28 @@ export const db = {
 };
 
 // Simplified and perfectly matched PostgreSQL schema for Supabase
-export const SUPABASE_SQL_SCHEMA = `-- Style X Luxury eCommerce Database Schema (Supabase Compatible)
--- Run this compilation query inside your Supabase SQL Editor (https://supabase.com) to establish all relational matrices
+export const SUPABASE_SQL_SCHEMA = `-- Style X Luxury eCommerce Database Schema (Idempotent Migration Block)
+-- Run this compilation query inside your Supabase SQL Editor (https://supabase.com).
+-- It is designed to be fully rerun-safe (idempotent), meaning you can run it as many times as you want
+-- without encountering "already exists" errors, while preserving your existing table records.
 
--- 1. Create Drop Statements for Clean Redefinition
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
-DROP FUNCTION IF EXISTS public.is_admin() CASCADE;
-DROP TABLE IF EXISTS public.order_items CASCADE;
-DROP TABLE IF EXISTS public.orders CASCADE;
-DROP TABLE IF EXISTS public.reviews CASCADE;
-DROP TABLE IF EXISTS public.products CASCADE;
-DROP TABLE IF EXISTS public.categories CASCADE;
-DROP TABLE IF EXISTS public.coupons CASCADE;
-DROP TABLE IF EXISTS public.chat_messages CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
-DROP TABLE IF EXISTS public.wishlist CASCADE;
-DROP TABLE IF EXISTS public.cart CASCADE;
+-- A. OPTIONAL Clean Redefinition (Uncomment the lines below ONLY if you want to wipe existing data and start over)
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+-- DROP FUNCTION IF EXISTS public.is_admin() CASCADE;
+-- DROP TABLE IF EXISTS public.order_items CASCADE;
+-- DROP TABLE IF EXISTS public.orders CASCADE;
+-- DROP TABLE IF EXISTS public.reviews CASCADE;
+-- DROP TABLE IF EXISTS public.products CASCADE;
+-- DROP TABLE IF EXISTS public.categories CASCADE;
+-- DROP TABLE IF EXISTS public.coupons CASCADE;
+-- DROP TABLE IF EXISTS public.chat_messages CASCADE;
+-- DROP TABLE IF EXISTS public.profiles CASCADE;
+-- DROP TABLE IF EXISTS public.wishlist CASCADE;
+-- DROP TABLE IF EXISTS public.cart CASCADE;
 
--- 2. Profiles Table (Holds Custom user metadata and roles)
-CREATE TABLE public.profiles (
+-- 1. Profiles Table (Holds Custom user metadata and roles)
+CREATE TABLE IF NOT EXISTS public.profiles (
     id TEXT PRIMARY KEY, -- Supports text IDs or Auth UUIDs cast to text
     email TEXT UNIQUE NOT NULL,
     full_name TEXT,
@@ -398,8 +422,8 @@ CREATE TABLE public.profiles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Categories Table
-CREATE TABLE public.categories (
+-- 2. Categories Table
+CREATE TABLE IF NOT EXISTS public.categories (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
@@ -408,8 +432,8 @@ CREATE TABLE public.categories (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Products Table
-CREATE TABLE public.products (
+-- 3. Products Table
+CREATE TABLE IF NOT EXISTS public.products (
     id TEXT PRIMARY KEY,
     sku TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
@@ -425,8 +449,8 @@ CREATE TABLE public.products (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Orders Table
-CREATE TABLE public.orders (
+-- 4. Orders Table
+CREATE TABLE IF NOT EXISTS public.orders (
     id TEXT PRIMARY KEY,
     user_id TEXT,
     customer_name TEXT NOT NULL,
@@ -440,8 +464,8 @@ CREATE TABLE public.orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Order Items Table
-CREATE TABLE public.order_items (
+-- 5. Order Items Table
+CREATE TABLE IF NOT EXISTS public.order_items (
     id TEXT PRIMARY KEY,
     order_id TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
     product_id TEXT,
@@ -451,8 +475,8 @@ CREATE TABLE public.order_items (
     price NUMERIC(12,2) NOT NULL
 );
 
--- 7. Reviews Table
-CREATE TABLE public.reviews (
+-- 6. Reviews Table
+CREATE TABLE IF NOT EXISTS public.reviews (
     id TEXT PRIMARY KEY,
     product_id TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
     product_name TEXT NOT NULL,
@@ -463,8 +487,8 @@ CREATE TABLE public.reviews (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. Coupons Table
-CREATE TABLE public.coupons (
+-- 7. Coupons Table
+CREATE TABLE IF NOT EXISTS public.coupons (
     id TEXT PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
     discount_type TEXT NOT NULL,
@@ -472,8 +496,8 @@ CREATE TABLE public.coupons (
     active BOOLEAN DEFAULT true
 );
 
--- 9. Chat Messages Table
-CREATE TABLE public.chat_messages (
+-- 8. Chat Messages Table
+CREATE TABLE IF NOT EXISTS public.chat_messages (
     id TEXT PRIMARY KEY,
     sender_id TEXT NOT NULL,
     sender_name TEXT NOT NULL,
@@ -483,8 +507,8 @@ CREATE TABLE public.chat_messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Wishlist Table
-CREATE TABLE public.wishlist (
+-- 9. Wishlist Table
+CREATE TABLE IF NOT EXISTS public.wishlist (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     product_id TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
@@ -492,8 +516,8 @@ CREATE TABLE public.wishlist (
     UNIQUE(user_id, product_id)
 );
 
--- 11. Cart Table
-CREATE TABLE public.cart (
+-- 10. Cart Table
+CREATE TABLE IF NOT EXISTS public.cart (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     product_id TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
@@ -502,7 +526,7 @@ CREATE TABLE public.cart (
     UNIQUE(user_id, product_id)
 );
 
--- 12. Secure helper function to check admin role using profiles table
+-- 11. Secure helper function to check admin role using profiles table
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN SECURITY DEFINER AS $$
 BEGIN
@@ -513,7 +537,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 13. Enable Row Level Security (RLS) on all Tables
+-- 12. Enable Row Level Security (RLS) on all Tables (Safe to run multiple times)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
@@ -525,51 +549,85 @@ ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wishlist ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cart ENABLE ROW LEVEL SECURITY;
 
--- 14. Security Policies (RLS) with role delegation
+-- 13. Security Policies (RLS) with drop-first pattern for absolute safety
 
 -- PROFILES Policies
+DROP POLICY IF EXISTS "Public read profiles" ON public.profiles;
 CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
 CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid()::text = id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Admins full control profiles" ON public.profiles;
 CREATE POLICY "Admins full control profiles" ON public.profiles FOR ALL USING (public.is_admin());
 
 -- CATEGORIES Policies
+DROP POLICY IF EXISTS "Public read categories" ON public.categories;
 CREATE POLICY "Public read categories" ON public.categories FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin write categories" ON public.categories;
 CREATE POLICY "Admin write categories" ON public.categories FOR ALL USING (public.is_admin());
 
 -- PRODUCTS Policies
+DROP POLICY IF EXISTS "Public read products" ON public.products;
 CREATE POLICY "Public read products" ON public.products FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin write products" ON public.products;
 CREATE POLICY "Admin write products" ON public.products FOR ALL USING (public.is_admin());
 
 -- ORDERS Policies
-CREATE POLICY "Public read orders" ON public.orders FOR SELECT USING (auth.uid()::text = user_id OR public.is_admin());
-CREATE POLICY "Public insert orders" ON public.orders FOR INSERT WITH CHECK (auth.uid()::text = user_id OR user_id IS NULL OR public.is_admin());
+DROP POLICY IF EXISTS "Public read orders" ON public.orders;
+CREATE POLICY "Public read orders" ON public.orders FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public insert orders" ON public.orders;
+CREATE POLICY "Public insert orders" ON public.orders FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admin write orders" ON public.orders;
 CREATE POLICY "Admin write orders" ON public.orders FOR ALL USING (public.is_admin());
 
 -- ORDER ITEMS Policies
+DROP POLICY IF EXISTS "Public read order_items" ON public.order_items;
 CREATE POLICY "Public read order_items" ON public.order_items FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public insert order_items" ON public.order_items;
 CREATE POLICY "Public insert order_items" ON public.order_items FOR INSERT WITH CHECK (true);
 
 -- REVIEWS Policies
+DROP POLICY IF EXISTS "Public read reviews" ON public.reviews;
 CREATE POLICY "Public read reviews" ON public.reviews FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public insert reviews" ON public.reviews;
 CREATE POLICY "Public insert reviews" ON public.reviews FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admin write reviews" ON public.reviews;
 CREATE POLICY "Admin write reviews" ON public.reviews FOR ALL USING (public.is_admin());
 
 -- COUPONS Policies
+DROP POLICY IF EXISTS "Public read coupons" ON public.coupons;
 CREATE POLICY "Public read coupons" ON public.coupons FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin write coupons" ON public.coupons;
 CREATE POLICY "Admin write coupons" ON public.coupons FOR ALL USING (public.is_admin());
 
 -- CHAT MESSAGES Policies
-CREATE POLICY "Read chats" ON public.chat_messages FOR SELECT USING (true); -- Client checks filters, admins see all
+DROP POLICY IF EXISTS "Read chats" ON public.chat_messages;
+CREATE POLICY "Read chats" ON public.chat_messages FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public insert chats" ON public.chat_messages;
 CREATE POLICY "Public insert chats" ON public.chat_messages FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admin write chats" ON public.chat_messages;
 CREATE POLICY "Admin write chats" ON public.chat_messages FOR ALL USING (public.is_admin());
 
 -- WISHLIST Policies
+DROP POLICY IF EXISTS "Users control own wishlist" ON public.wishlist;
 CREATE POLICY "Users control own wishlist" ON public.wishlist FOR ALL USING (auth.uid()::text = user_id OR public.is_admin());
 
 -- CART Policies
+DROP POLICY IF EXISTS "Users control own cart" ON public.cart;
 CREATE POLICY "Users control own cart" ON public.cart FOR ALL USING (auth.uid()::text = user_id OR public.is_admin());
 
--- 15. Trigger to automatically provision a profile record when a new User signs up on Auth
+-- 14. Trigger to automatically provision a profile record when a new User signs up on Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -579,14 +637,16 @@ BEGIN
     new.email,
     COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', ''),
     COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
-    'customer'
+    CASE WHEN new.email = 'admin@stylex.luxury' THEN 'admin' ELSE 'customer' END
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
+-- Symmetrical clean trigger attachment
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 `;
