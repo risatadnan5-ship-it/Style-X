@@ -1,0 +1,6 @@
+{
+  "name": "Style X",
+  "description": "Premium international luxury brand eCommerce experience with curated collections, real-time client state backend, administrator dashboard, chat console, and interactive checkout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
