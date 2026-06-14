@@ -7,9 +7,10 @@ import {
 import { db } from '../dbMock';
 import { supabase } from '../supabaseClient';
 import { Product, Order, Review, ChatMessage, Coupon } from '../types';
+import SupabaseGuide from './SupabaseGuide';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'orders' | 'products' | 'reviews' | 'chat' | 'coupons'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'orders' | 'products' | 'reviews' | 'chat' | 'coupons' | 'database'>('analytics');
   
   // Real-time admin state loads from DB mock
   const [products, setProducts] = useState<Product[]>([]);
@@ -17,6 +18,7 @@ export default function AdminDashboard() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [dbStatus, setDbStatus] = useState(db.getSupabaseStatus());
 
   // Product Creator Form state
   const [showProductForm, setShowProductForm] = useState(false);
@@ -80,6 +82,7 @@ export default function AdminDashboard() {
     setReviews(db.getReviews());
     setChatMessages(db.getChatMessages());
     setCoupons(db.getCoupons());
+    setDbStatus(db.getSupabaseStatus());
   };
 
   // Orders dispatcher
@@ -126,6 +129,7 @@ export default function AdminDashboard() {
 
     // Try to save directly to live Supabase, but fall back gracefully
     let supabaseSuccess = false;
+    let supabaseErrorDetails = 'Unknown connection error';
     try {
       const { error } = await supabase
         .from('products')
@@ -134,9 +138,11 @@ export default function AdminDashboard() {
       if (!error) {
         supabaseSuccess = true;
       } else {
+        supabaseErrorDetails = error.message;
         console.warn('[SUPABASE PRODUCT CREATION WARNING - FALLING BACK TO LOCAL]', error);
       }
-    } catch (exc) {
+    } catch (exc: any) {
+      supabaseErrorDetails = exc?.message || String(exc);
       console.warn('[SUPABASE PRODUCT CREATION EXCEPTION - FALLING BACK TO LOCAL]', exc);
     }
 
@@ -153,9 +159,16 @@ export default function AdminDashboard() {
     setShowProductForm(false);
     
     if (supabaseSuccess) {
-      alert('Bespoke product successfully added to your Supabase catalog!');
+      alert('🌟 SUCCESS: Bespoke product officially added and live in your Supabase database! Other customers can see it immediately!');
     } else {
-      alert('Bespoke product successfully added! (Saved locally in high-fidelity sandbox cache; live database sync pending authorizations)');
+      alert(`⚠️ DATABASE WARNING: Product uploaded but only visible in YOUR browser!
+
+Why this happened:
+It failed to save to the Supabase database (Error: ${supabaseErrorDetails}). Because of this, the product is stored only in your local browser cache instead of the cloud database, which is why other customers cannot see it.
+
+How to fix this:
+1. Ensure you have defined 'VITE_SUPABASE_URL' and 'VITE_SUPABASE_ANON_KEY' in your env variables (Vercel Settings -> Environment Variables) and redeployed.
+2. Ensure you have created all tables via the SQL Script! Go to the "Database" tab in this admin panel, copy the SQL migration script, and run it in your Supabase SQL Editor.`);
     }
   };
 
@@ -309,11 +322,42 @@ export default function AdminDashboard() {
         <div>
           <span className="text-[10px] font-mono tracking-[0.4em] text-[#D4AF37] uppercase font-bold">Style X Executive Console</span>
           <h1 className="text-3xl font-serif font-black text-white uppercase tracking-wider mt-1">Directorship Suite</h1>
+          
+          {/* Active Database Synchronization Diagnostics Bar */}
+          <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase">
+            {dbStatus.connected ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-green-950/40 border border-green-800 text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                Supabase Live Connected
+              </span>
+            ) : dbStatus.connected === false ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-950/40 border border-red-800 text-red-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                Supabase Integration Pending / Blocked
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-950/45 border border-amber-800 text-amber-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                Syncing with Supabase clouds...
+              </span>
+            )}
+
+            {/* Check sandbox vs custom credentials */}
+            {(!(import.meta as any).env?.VITE_SUPABASE_URL || (import.meta as any).env?.VITE_SUPABASE_URL === 'https://khlmfaodrzzjonjhzodu.supabase.co') ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/20 border border-amber-900/45 text-amber-500 font-bold">
+                ⚠️ Sandbox Mode (Requires Vercel Env Config)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-950/30 border border-purple-900 text-purple-400 font-semibold">
+                🛡️ Custom Production Database Loaded
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Quick controls tab */}
         <div className="flex flex-wrap gap-2 text-xs font-mono">
-          {(['analytics', 'orders', 'products', 'reviews', 'chat', 'coupons'] as const).map(tab => (
+          {(['analytics', 'orders', 'products', 'reviews', 'chat', 'coupons', 'database'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -884,6 +928,12 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'database' && (
+        <div id="database-deck" className="space-y-6 animate-fadeIn">
+          <SupabaseGuide />
         </div>
       )}
 

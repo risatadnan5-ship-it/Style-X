@@ -263,9 +263,6 @@ export default function App() {
             {/* Testimonials */}
             <Testimonials />
 
-            {/* Dynamic Supabase Interactive Specifications Guide */}
-            <SupabaseGuide />
-
             {/* Advisory FAQ accordions */}
             <FaqSection />
 
@@ -276,7 +273,15 @@ export default function App() {
       </main>
 
       {/* 3. Global Footer Deck */}
-      <Footer />
+      <Footer onAdminClick={() => {
+        const currentUser = db.getCurrentUser();
+        if (currentUser?.role === 'admin') {
+          setIsAdminView(true);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          window.dispatchEvent(new Event('stylex_trigger_admin'));
+        }
+      }} />
 
       {/* 4. Drawers, Modals & Concierge Chat Widgets overlays */}
       <CartDrawer

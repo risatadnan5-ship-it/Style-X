@@ -168,52 +168,126 @@ export async function syncFromSupabase() {
 
 // Push local data as seeding
 export async function seedSupabase() {
-  try {
-    supabaseError = null;
-    
-    // Seed Categories
-    const localCats = get<Category[]>(KEYS.CATEGORIES, INITIAL_CATEGORIES);
-    const { error: catErr } = await supabase.from('categories').upsert(localCats);
-    if (catErr) throw catErr;
+  const failures: { table: string; message: string }[] = [];
+  const successes: string[] = [];
+  supabaseError = null;
 
-    // Seed Products
-    const localProds = get<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    const { error: prodErr } = await supabase.from('products').upsert(localProds);
-    if (prodErr) throw prodErr;
-
-    // Seed Coupons
-    const localCoups = get<Coupon[]>(KEYS.COUPONS, INITIAL_COUPONS);
-    const { error: coupErr } = await supabase.from('coupons').upsert(localCoups);
-    if (coupErr) throw coupErr;
-
-    // Seed Reviews
-    const localRevs = get<Review[]>(KEYS.REVIEWS, DEFAULT_REVIEWS);
-    const { error: revErr } = await supabase.from('reviews').upsert(localRevs);
-    if (revErr) throw revErr;
-
-    // Seed welcome chats
-    const welcomeMsg = [
-      {
-        id: 'welcome-msg-1',
-        sender_id: 'admin-id',
-        sender_name: 'Style X Private Concierge',
-        message: 'Greetings from Style X. I am your private digital attache. How may I assist you with our bespoke catalog today?',
-        created_at: new Date().toISOString(),
-        is_admin: true
+  const safeSeed = async (tableName: string, data: any[]) => {
+    if (!data || data.length === 0) return;
+    try {
+      const { error } = await supabase.from(tableName).upsert(data);
+      if (error) {
+        failures.push({ table: tableName, message: error.message });
+      } else {
+        successes.push(tableName);
       }
-    ];
-    const { error: chatErr } = await supabase.from('chat_messages').upsert(welcomeMsg);
-    if (chatErr) throw chatErr;
+    } catch (err: any) {
+      failures.push({ table: tableName, message: err?.message || String(err) });
+    }
+  };
 
-    supabaseConnected = true;
-    await syncFromSupabase();
-    return true;
-  } catch (error: any) {
-    console.error('[SUPABASE SEED ERROR]', error);
-    supabaseError = `Failed to push seeds. Ensure the database tables are created first using the SQL Pane. Details: ${error.message}`;
+  // Seed Categories
+  const localCats = get<Category[]>(KEYS.CATEGORIES, INITIAL_CATEGORIES);
+  await safeSeed('categories', localCats);
+
+  // Seed Products
+  const localProds = get<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);
+  await safeSeed('products', localProds);
+
+  // Seed Coupons
+  const localCoups = get<Coupon[]>(KEYS.COUPONS, INITIAL_COUPONS);
+  await safeSeed('coupons', localCoups);
+
+  // Seed Reviews
+  const localRevs = get<Review[]>(KEYS.REVIEWS, DEFAULT_REVIEWS);
+  await safeSeed('reviews', localRevs);
+
+  // Seed welcome chats
+  const welcomeMsg = [
+    {
+      id: 'welcome-msg-1',
+      sender_id: 'admin-id',
+      sender_name: 'Style X Private Concierge',
+      message: 'Greetings from Style X. I am your private digital attache. How may I assist you with our bespoke catalog today?',
+      created_at: new Date().toISOString(),
+      is_admin: true
+    }
+  ];
+  await safeSeed('chat_messages', welcomeMsg);
+
+  if (failures.length > 0) {
+    const failureSummary = failures.map(f => `${f.table}: ${f.message}`).join(' | ');
+    supabaseError = `Seed complete with errors. Succeeded tables: [${successes.join(', ')}]. Failed tables: [${failureSummary}]. Did you create all tables using the PostgreSQL Schema script inside your Supabase SQL Editor?`;
+    supabaseConnected = successes.length > 0;
     window.dispatchEvent(new Event('stylex_db_update'));
     return false;
   }
+
+  supabaseConnected = true;
+  await syncFromSupabase();
+  return true;
+}
+
+// Explicit push of all local storage data to Supabase
+export async function pushLocalToSupabase() {
+  const failures: { table: string; message: string }[] = [];
+  const successes: string[] = [];
+  supabaseError = null;
+
+  const safeUpsert = async (tableName: string, data: any[]) => {
+    if (!data || data.length === 0) return;
+    try {
+      const { error } = await supabase.from(tableName).upsert(data);
+      if (error) {
+        failures.push({ table: tableName, message: error.message });
+      } else {
+        successes.push(tableName);
+      }
+    } catch (err: any) {
+      failures.push({ table: tableName, message: err?.message || String(err) });
+    }
+  };
+
+  // 1. Push Categories
+  const localCats = get<Category[]>(KEYS.CATEGORIES, INITIAL_CATEGORIES);
+  await safeUpsert('categories', localCats);
+
+  // 2. Push Products
+  const localProds = get<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);
+  await safeUpsert('products', localProds);
+
+  // 3. Push Coupons
+  const localCoups = get<Coupon[]>(KEYS.COUPONS, INITIAL_COUPONS);
+  await safeUpsert('coupons', localCoups);
+
+  // 4. Push Reviews
+  const localRevs = get<Review[]>(KEYS.REVIEWS, DEFAULT_REVIEWS);
+  await safeUpsert('reviews', localRevs);
+
+  // 5. Push Chat Messages
+  const localChats = get<any[]>(KEYS.CHAT_MESSAGES, []);
+  await safeUpsert('chat_messages', localChats);
+
+  // 6. Push Orders
+  const localOrders = get<Order[]>(KEYS.ORDERS, []);
+  await safeUpsert('orders', localOrders);
+
+  // 7. Push Order Items
+  const localItems = get<OrderItem[]>(KEYS.ORDER_ITEMS, []);
+  await safeUpsert('order_items', localItems);
+
+  if (failures.length > 0) {
+    const failureSummary = failures.map(f => `${f.table}: ${f.message}`).join(' | ');
+    supabaseError = `Sync complete with errors. Succeeded: [${successes.join(', ')}]. Failed tables: [${failureSummary}]. Check if you have created all tables via the SQL Pane or logged in as Admin if RLS is enabled.`;
+    supabaseConnected = successes.length > 0;
+    window.dispatchEvent(new Event('stylex_db_update'));
+    return false;
+  }
+
+  supabaseConnected = true;
+  supabaseError = null;
+  window.dispatchEvent(new Event('stylex_db_update'));
+  return true;
 }
 
 // Initial background pull load trigger
@@ -229,6 +303,7 @@ export const db = {
   }),
   syncFromSupabase,
   seedSupabase,
+  pushLocalToSupabase,
 
   getProducts: (): Product[] => get<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS),
   setProducts: (products: Product[]) => {

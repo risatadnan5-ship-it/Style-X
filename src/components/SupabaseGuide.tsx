@@ -39,6 +39,28 @@ export default function SupabaseGuide() {
     setSeeding(false);
   };
 
+  const [syncing, setSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState<boolean | null>(null);
+  const [pulling, setPulling] = useState(false);
+
+  const handleSyncUp = async () => {
+    setSyncing(true);
+    setSyncSuccess(null);
+    const success = await db.pushLocalToSupabase();
+    setSyncSuccess(success);
+    setSyncing(false);
+    if (success) {
+      alert('Sovereign local cache successfully synchronized with your custom Supabase database!');
+    }
+  };
+
+  const handlePullDown = async () => {
+    setPulling(true);
+    await db.syncFromSupabase();
+    setPulling(false);
+    alert('Sovereign catalog successfully updated from your live Supabase database!');
+  };
+
   return (
     <section id="stylex-supabase-guide" className="relative bg-[#0E0E0E] py-20 lg:py-24 border-t border-b border-[#D4AF37]/15">
       <div className="mx-auto max-w-7xl px-6 lg:px-8 text-left">
@@ -224,11 +246,34 @@ VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                     Established live sync tunnel. All products, orders, chat tables, reviews, and coupons are transparently reading and writing with your active Supabase cloud.
                   </p>
                   <button
-                    onClick={() => db.syncFromSupabase()}
-                    className="w-full py-2 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 text-[#D4AF37] text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center block"
+                    onClick={handleSyncUp}
+                    disabled={syncing}
+                    className="w-full py-2.5 bg-[#D4AF37] hover:bg-white text-black text-[10px] font-extrabold uppercase tracking-widest transition-colors cursor-pointer text-center block disabled:opacity-50"
                   >
-                    Force Cloud Refresh
+                    {syncing ? 'SYNCING TO SUPABASE...' : 'Sync to Supabase'}
                   </button>
+                  <button
+                    onClick={handlePullDown}
+                    disabled={pulling}
+                    className="w-full py-2 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 text-[#D4AF37] text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center block disabled:opacity-50"
+                  >
+                    {pulling ? 'FETCHING...' : 'Fetch from Supabase'}
+                  </button>
+                  {syncSuccess === true && (
+                    <p className="text-[10px] text-green-500 font-mono uppercase tracking-widest text-center mt-2 font-bold">
+                      ✔ Upstream Sync Complete
+                    </p>
+                  )}
+                  {syncSuccess === false && (
+                    <div className="mt-2.5 p-3 bg-red-950/20 border border-red-900/30 text-left rounded">
+                      <span className="text-[9px] text-red-400 font-mono uppercase tracking-widest font-extrabold block mb-1">
+                        ✘ Upstream Exceptions Detected:
+                      </span>
+                      <p className="text-[9.5px] text-zinc-400 font-mono leading-relaxed break-words uppercase">
+                        {status.error || 'Setup pending. Ensure all tables are created.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : status.connected === false ? (
                 <div className="space-y-4">

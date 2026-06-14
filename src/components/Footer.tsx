@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Mail, Sparkles, AlertCircle } from 'lucide-react';
 
-export default function Footer() {
+interface FooterProps {
+  onAdminClick?: () => void;
+}
+
+export default function Footer({ onAdminClick }: FooterProps) {
   const [emailValue, setEmailValue] = useState('');
   const [newsSuccess, setNewsSuccess] = useState('');
 
@@ -77,7 +81,6 @@ export default function Footer() {
             <ul className="space-y-2">
               <li><a href="#stylex-faq" className="hover:text-[#D4AF37]">Frequently Asked Issues</a></li>
               <li><a href="#stylex-contact" className="hover:text-[#D4AF37]">Contact secure lines</a></li>
-              <li><a href="#stylex-supabase-guide" className="hover:text-[#D4AF37]">Supabase SQL Code</a></li>
               <li><a href="#stylex-brand-story" className="hover:text-[#D4AF37]">Monaco Architecture</a></li>
             </ul>
           </div>
@@ -106,7 +109,19 @@ export default function Footer() {
 
         {/* Bottom copyright declaration */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-t border-zinc-900 pt-8 mt-8 text-[11px] text-gray-500 font-mono">
-          <p>© {new Date().getFullYear()} STYLE X MONACO COUTURE S.A. ALL SOVEREIGN RIGHTS ENCRYPTED.</p>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <p>© {new Date().getFullYear()} STYLE X MONACO COUTURE S.A. ALL SOVEREIGN RIGHTS ENCRYPTED.</p>
+            {onAdminClick && (
+              <button
+                type="button"
+                onClick={onAdminClick}
+                className="text-[#D4AF37] hover:text-white uppercase transition-all tracking-[0.15em] border border-[#D4AF37]/30 hover:border-[#D4AF37] px-2 py-0.5 rounded text-[9px] cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse"></span>
+                Executive Admin Console
+              </button>
+            )}
+          </div>
           <div className="flex gap-2 items-center text-[#D4AF37]">
             <AlertCircle className="h-3.5 w-3.5" />
             <span>Secure Cash on Delivery Inspections Certified</span>

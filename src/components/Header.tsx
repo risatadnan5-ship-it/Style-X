@@ -58,8 +58,33 @@ export default function Header({
     const interval = setInterval(() => {
       setCurrentUser(db.getCurrentUser());
     }, 1500);
-    return () => clearInterval(interval);
-  }, []);
+
+    const checkUrlAndEvents = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('admin') === 'true' || window.location.hash === '#admin') {
+        setShowAdminPasswordPrompt(true);
+        setAdminPasswordInput('');
+        setPasswordError('');
+      }
+    };
+    
+    checkUrlAndEvents();
+
+    const handleTriggerAdmin = () => {
+      setShowAdminPasswordPrompt(true);
+      setAdminPasswordInput('');
+      setPasswordError('');
+    };
+
+    window.addEventListener('hashchange', checkUrlAndEvents);
+    window.addEventListener('stylex_trigger_admin', handleTriggerAdmin);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('hashchange', checkUrlAndEvents);
+      window.removeEventListener('stylex_trigger_admin', handleTriggerAdmin);
+    };
+  }, [isAdmin]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -141,36 +166,10 @@ export default function Header({
           >
             Concierge FAQ
           </button>
-          <button 
-            id="nav-btn-database"
-            onClick={() => onNavigateToSection('supabase')} 
-            className="flex items-center space-x-1.5 text-[#D4AF37] hover:text-white transition-colors duration-200"
-          >
-            <Sparkles className="h-3 w-3" />
-            <span>Supabase Code</span>
-          </button>
         </nav>
 
         {/* Right: Functional Control Deck */}
         <div id="header-controls-group" className="flex items-center space-x-5">
-          
-          {/* Quick Role Toggle Bar indicator */}
-          <div className="hidden lg:flex items-center bg-[#111111] p-1 rounded-none border border-white/10 text-[10px]">
-            <button
-              id="switch-to-client-btn"
-              onClick={() => { if (isAdmin) handleSwitchRole('customer'); }}
-              className={`px-3 py-1 rounded-none transition-all duration-300 ${!isAdmin ? 'bg-[#D4AF37] text-black font-bold' : 'text-gray-400 hover:text-white'}`}
-            >
-              VIP Client
-            </button>
-            <button
-              id="switch-to-admin-btn"
-              onClick={() => { if (!isAdmin) handleSwitchRole('admin'); }}
-              className={`px-3 py-1 rounded-none transition-all duration-300 ${isAdmin ? 'bg-[#D4AF37] text-black font-bold' : 'text-gray-400 hover:text-white'}`}
-            >
-              Director Admin
-            </button>
-          </div>
 
           {/* Active Notifications System */}
           <div className="relative">
