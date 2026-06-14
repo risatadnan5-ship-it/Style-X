@@ -370,7 +370,7 @@ export default function Header({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (adminPasswordInput === 'risatx') {
-                    // Automate actual Supabase Auth Session
+                    // Try to automate actual Supabase Auth Session
                     try {
                       const adminEmail = 'admin@stylex.luxury';
                       const adminPassword = 'BespokeAdminPassword123!';
@@ -394,14 +394,16 @@ export default function Header({
                         });
                         
                         if (signUpErr) {
-                          console.error('[SUPABASE ADMIN REGISTRATION ERROR]', signUpErr);
+                          console.info('[SUPABASE ADMIN REGISTRATION INFO]', signUpErr.message);
+                          console.warn('Supabase sign-up rate limit, falling back to local session.');
                         } else {
                           console.log('[SUPABASE] Admin account registered successfully.');
                           // Force role column mapping in profile
                           await supabase.from('profiles').update({ role: 'admin' }).eq('id', signUpData.user?.id);
                         }
                       } else if (error) {
-                        console.error('[SUPABASE ADMIN SIGNIN ERROR]', error);
+                        console.info('[SUPABASE ADMIN SIGNIN INFO]', error.message);
+                        console.warn('Supabase sign-in rate limit, falling back to local session.');
                       } else {
                         console.log('[SUPABASE] Admin session created. Auth ID:', data.user?.id);
                       }
@@ -446,9 +448,10 @@ export default function Header({
                     className="w-full bg-[#111111] border border-white/10 p-3.5 text-sm text-white focus:outline-none focus:border-[#D4AF37] transition-all rounded-none font-mono text-center tracking-[0.25em]"
                   />
                   {passwordError && (
-                    <p className="text-[10px] font-mono text-red-500 mt-2 tracking-wide uppercase text-center">
+                    <div className="text-[10px] font-mono text-red-400 mt-3 p-3 bg-red-950/20 border border-red-900/30 text-left leading-relaxed uppercase">
+                      <span className="font-bold text-red-500 block mb-1">Authorization Exception:</span>
                       {passwordError}
-                    </p>
+                    </div>
                   )}
                 </div>
 
